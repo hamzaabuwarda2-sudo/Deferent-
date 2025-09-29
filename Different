@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>لعبة اوجد المختلف</title>
+  <style>
+    :root{
+      --bg:#071028;
+      --card:#071228;
+      --accent:#60a5fa;
+      --text:#e6eef8;
+    }
+    *{box-sizing:border-box;font-family:Tahoma, Arial, sans-serif}
+    body{
+      margin:0;
+      min-height:100vh;
+      background:linear-gradient(180deg,#071030 0%,#081025 100%);
+      color:var(--text);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+    .app{
+      width:100%;
+      max-width:920px;
+      background:rgba(255,255,255,0.03);
+      border-radius:16px;
+      padding:18px;
+      box-shadow:0 10px 30px rgba(2,6,23,0.6);
+    }
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px}
+    h1{font-size:20px;margin:0}
+    .controls{display:flex;gap:8px;align-items:center}
+    button{
+      background:var(--accent);
+      border:none;
+      color:#04263b;
+      padding:8px 12px;
+      border-radius:10px;
+      font-weight:700;
+      cursor:pointer;
+    }
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.08);color:var(--text)}
+    .meta{display:flex;gap:12px;align-items:center}
+    .board-wrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
+    .board{
+      background:rgba(255,255,255,0.02);
+      padding:12px;
+      border-radius:12px;
+      display:grid;
+      gap:8px;
+      width:100%;
+      max-width:720px;
+    }
+    .cell{
+      width:56px;height:56px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+      cursor:pointer;user-select:none;transition:transform .12s ease,box-shadow .12s,outline .12s;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
+    }
+    .cell:active{transform:scale(.97)}
+    .info{margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .pill{background:rgba(255,255,255,0.03);padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,0.02)}
+    .message{margin-top:12px;padding:10px;border-radius:8px;background:linear-gradient(90deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));font-size:14px}
+    @media(min-width:720px){.cell{width:68px;height:68px}}
+    .flash{
+      outline: 3px solid rgba(255,255,255,0.55);
+      transform: scale(1.03);
+    }
+    .correct{
+      outline: 3px solid rgba(0,255,150,0.7) !important;
+      box-shadow: 0 8px 24px rgba(0,255,150,0.06);
+    }
+    .wrong{
+      outline: 3px solid rgba(255,80,80,0.8) !important;
+      filter: saturate(.6) brightness(.9);
+    }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="لعبة اوجد المختلف">
+    <header>
+      <h1>لعبة: اوجد المختلف 🔍</h1>
+      <div class="controls">
+        <div class="meta" aria-hidden="false">
+          <div class="pill">المستوى: <strong id="level">1</strong></div>
+          <div class="pill">الوقت: <strong id="time">30</strong> ث</div>
+          <div class="pill">النقاط: <strong id="score">0</strong></div>
+        </div>
+        <button id="restart">إعادة</button>
+        <button id="hint" class="secondary">معلومة</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="board-wrap">
+        <div id="board" class="board" style="grid-template-columns: repeat(4,1fr)"></div>
+      </div>
+
+      <div class="info">
+        <div class="pill">نوع الاختلاف: <span id="diffType">لون</span></div>
+        <div class="pill">المحاولات المتبقية: <span id="tries">3</span></div>
+      </div>
+
+      <div class="message" id="message">اضغط المربع المختلف قبل نفاد الوقت!</div>
+    </main>
+  </div>
+
+  <script>
+    // عناصر الواجهة
+    const board = document.getElementById('board');
+    const levelEl = document.getElementById('level');
+    const timeEl = document.getElementById('time');
+    const scoreEl = document.getElementById('score');
+    const message = document.getElementById('message');
+    const diffTypeEl = document.getElementById('diffType');
+    const triesEl = document.getElementById('tries');
+
+    const restartBtn = document.getElementById('restart');
+    const hintBtn = document.getElementById('hint');
+
+    // حالات اللعبة
+    let level = 1;
+    let score = 0;
+    let timeLeft = 30;
+    let timer = null;
+    let tries = 3;
+    let correctIndex = null;
+    let locked = false; // لمنع النقر أثناء الانتقال
+
+    const diffTypes = ['لون','زاوية','حجم','ظل'];
+
+    // ابدأ المستوى
+    function startLevel(){
+      locked = false;
+      clearInterval(timer);
+      timeLeft = Math.max(8, 30 - Math.floor(level * 0.8)); // يقل الوقت مع المستوى
+      levelEl.textContent = level;
+      scoreEl.textContent = score;
+      timeEl.textContent = timeLeft;
+      triesEl.textContent = tries;
+
+      // حساب حجم الشبكة (يزيد بصعود المستوى)
+      const base = Math.min(2 + Math.floor(level / 1.25), 10); // حدود لتفادي صف كبير جداً
+      const cols = base;
+      const rows = base;
+      board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      board.innerHTML = '';
+
+      // نوع الاختلاف
+      const diffType = diffTypes[(level-1) % diffTypes.length];
+      diffTypeEl.textContent = diffType;
+
+      // إعداد لون أساسي
+      const baseHue = Math.floor(Math.random()*360);
+      const baseSat = 55 + Math.floor(Math.random()*20);
+      const baseLight = 40 + Math.floor(Math.random()*12);
+
+      const total = cols * rows;
+      correctIndex = Math.floor(Math.random()*total);
+
+      for(let i=0;i<total;i++){
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.index = i;
+
+        // خصائص متغيرة خفيفة لتجنب أن تكون متطابقة تمامًا
+        const hue = baseHue + Math.floor((Math.random()-0.5)*6);
+        const sat = baseSat + (Math.random()*6-3);
+        const light = baseLight + (Math.random()*6-3);
+
+        if(i == correctIndex){
+          // بناء الاختلاف حسب النوع
+          if(diffType === 'لون'){
+            // خلي المختلف أقرب لكن ملحوظ
+            cell.style.background = `hsl(${hue+10}, ${Math.max(30,sat)}%, ${Math.min(light+12,92)}%)`;
+          } else if(diffType === 'زاوية'){
+            cell.style.background = `hsl(${hue}, ${sat}%, ${light}%)`;
+            cell.style.transform = 'rotate(8deg)';
+          } else if(diffType === 'حجم'){
+            cell.style.background = `hsl(${hue}, ${sat}%, ${light}%)`;
+            // نجعل المحتوى أصغر داخل الخلية
+            const inner = document.createElement('div');
+            inner.style.width = '78%';
+            inner.style.height = '78%';
+            inner.style.borderRadius = '6px';
+            inner.style.background = `hsl(${hue}, ${sat}%, ${light}%)`;
+            inner.style.boxShadow = '0 6px 16px rgba(0,0,0,0.25)';
+            cell.appendChild(inner);
+          } else { // ظل
+            cell.style.background = `linear-gradient(180deg,hsl(${hue}, ${sat}%, ${light}%), hsl(${hue}, ${sat}%, ${Math.max(light-10,0)}%))`;
+            cell.style.boxShadow = '0 8px 20px rgba(0,0,0,0.45)';
+          }
+          cell.dataset.correct = '1';
+        } else {
+          // الخلايا العادية
+          cell.style.background = `hsl(${hue}, ${sat}%, ${light}%)`;
+        }
+
+        cell.addEventListener('click', onCellClick);
+        board.appendChild(cell);
+      }
+
+      // بدء المؤقت
+      timer = setInterval(() => {
+        timeLeft--;
+        timeEl.textContent = timeLeft;
+        if(timeLeft <= 0){
+          clearInterval(timer);
+          onTimeUp();
+        }
+      }, 1000);
+
+      message.textContent = `المستوى ${level} — ابحث عن المربع المختلف!`;
+    }
+
+    // عند انتهاء الوقت
+    function onTimeUp(){
+      locked = true;
+      tries--;
+      triesEl.textContent = tries;
+      message.textContent = 'انتهى الوقت! خسرت محاولة.';
+      flashCorrect();
+
+      if(tries <= 0){
+        endGame(false);
+      } else {
+        // بعد ثانيتين ابدأ نفس المستوى مجدداً
+        setTimeout(() => {
+          startLevel();
+        }, 1200);
+      }
+    }
+
+    // عند الضغط على خلية
+    function onCellClick(e){
+      if(locked) return;
+      const cell = e.currentTarget;
+      const isCorrect = cell.dataset.correct === '1';
+
+      if(isCorrect){
+        // فاز بالمستوى
+        locked = true;
+        cell.classList.add('correct');
+        score += Math.max(10, Math.floor(50 / Math.sqrt(level))); // نقاط أقل كلما زاد المستوى بشكل طفيف
+        scoreEl.textContent = score;
+        message.textContent = 'صحيح! تم الانتقال للمستوى التالي.';
+        clearInterval(timer);
+        // تأثير قصير ثم التالي
+        setTimeout(() => {
+          level++;
+          startLevel();
+        }, 800);
+      } else {
+        // خطأ
+        cell.classList.add('wrong');
+        locked = true;
+        tries--;
+        triesEl.textContent = tries;
+        message.textContent = 'خطأ! خسرت محاولة.';
+        // إظهار الصحيح مع وميض
+        flashCorrect();
+        clearInterval(timer);
+        if(tries <= 0){
+          setTimeout(()=> endGame(false), 900);
+        } else {
+          setTimeout(()=> {
+            // أعد محاولة نفس المستوى
+            startLevel();
+          }, 900);
+        }
+      }
+    }
+
+    // إبراز الخلية الصحيحة لبضع لحظات
+    function flashCorrect(){
+      const cells = board.querySelectorAll('.cell');
+      if(correctIndex === null) return;
+      const correctCell = Array.from(cells).find(c => Number(c.dataset.index) === Number(correctIndex));
+      if(!correctCell) return;
+      correctCell.classList.add('flash');
+      setTimeout(()=> {
+        correctCell.classList.remove('flash');
+      }, 900);
+    }
+
+    // زر المعلومة (hint): يلمّع الخلية الصحيحة لمدة قصيرة لكن يقلل النقاط قليلاً
+    hintBtn.addEventListener('click', () => {
+      if(locked) return;
+      score = Math.max(0, score - 5);
+      scoreEl.textContent = score;
+      flashCorrect();
+      message.textContent = 'تلميح مستخدم (خصم 5 نقاط)';
+    });
+
+    // إعادة بدء اللعبة
+    restartBtn.addEventListener('click', () => {
+      clearInterval(timer);
+      level = 1;
+      score = 0;
+      tries = 3;
+      correctIndex = null;
+      message.textContent = 'اللعبة أعيدت. حظاً سعيداً!';
+      startLevel();
+    });
+
+    // نهاية اللعبة
+    function endGame(won){
+      clearInterval(timer);
+      locked = true;
+      if(won){
+        message.textContent = `تهانينا! أنهيت اللعبة. نقاطك: ${score}`;
+      } else {
+        message.textContent = `انتهت المحاولات — اللعبة انتهت. نقاطك: ${score}`;
+        // إظهار الصحيح نهائياً
+        const cells = board.querySelectorAll('.cell');
+        const correctCell = Array.from(cells).find(c => Number(c.dataset.index) === Number(correctIndex));
+        if(correctCell) correctCell.classList.add('correct');
+      }
+    }
+
+    // ابدأ أول مستوى عند التحميل
+    startLevel();
+
+    // تحسين الوصول: إعادة تركيز لوحة بعد تحديث الصفحة
+    window.addEventListener('keydown', (e) => {
+      if(e.key === 'r' || e.key === 'R') {
+        restartBtn.click();
+      } else if(e.key === 'h' || e.key === 'H') {
+        hintBtn.click();
+      }
+    });
+  </script>
+</body>
+</html>
